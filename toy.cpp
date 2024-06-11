@@ -49,6 +49,7 @@ static int gettok(){
             LastChar = getchar();
         }while(isdigit(LastChar)||LastChar=='.');
         NumVal = strtod(Numstr.c_str(),nullptr);
+        return tok_number;
     }
     if(LastChar=='#'){
         do
@@ -64,7 +65,7 @@ static int gettok(){
     return ThisChar;
 }
 
-//===----------------------------------------------------------------------===//
+//===------z----------------------------------------------------------------===//
 // AST
 //===----------------------------------------------------------------------===//
 
@@ -175,7 +176,11 @@ static std::unique_ptr<ExprAST> ParseParenExpr(){
 static std::unique_ptr<ExprAST> ParseIdentifierExpr(){
     std::string IdName=IdentifierStr;
     getNextToken();
+    if (CurTok != '(') // Simple variable ref.
+      return std::make_unique<VariableExprAst>(IdName);
+    getNextToken();
     std::vector<std::unique_ptr<ExprAST>> Args;
+    
     if(CurTok != ')'){
         while(true){
             
@@ -233,54 +238,43 @@ static std::unique_ptr<ExprAST> ParseExpression() {
   return ParseBinOpRHS(0, std::move(LHS));
 }
 
-/// prototype
-///   ::= id '(' id* ')'
-static std::unique_ptr<PrototypeAST> ParsePrototype() {
-  if (CurTok != tok_identifier)
+static std::unique_ptr<PrototypeAST> ParsePrototype(){
+  if(CurTok!=tok_identifier)
     return LogErrorP("Expected function name in prototype");
-
   std::string FnName = IdentifierStr;
   getNextToken();
-
-  if (CurTok != '(')
+  if(CurTok != '(')
     return LogErrorP("Expected '(' in prototype");
-
-  // Read the list of argument names.
   std::vector<std::string> ArgNames;
-  while (getNextToken() == tok_identifier)
-    ArgNames.push_back(IdentifierStr);
+  while(getNextToken()==tok_identifier)
+      ArgNames.push_back(IdentifierStr);
   if (CurTok != ')')
     return LogErrorP("Expected ')' in prototype");
-
-  // success.
-  getNextToken();  // eat ')'.
-
-  return std::make_unique<PrototypeAST>(FnName, std::move(ArgNames));
+  getNextToken();
+  return std::make_unique<PrototypeAST>(FnName,ArgNames);
 }
-/// definition ::= 'def' prototype expression
-static std::unique_ptr<FunctionAST> ParseDefinition() {
-  getNextToken();  // eat def.
-  auto Proto = ParsePrototype();
-  if (!Proto) return nullptr;
 
-  if (auto E = ParseExpression())
-    return std::make_unique<FunctionAST>(std::move(Proto), std::move(E));
+static std::unique_ptr<FunctionAST> ParseDefinition(){
+  getNextToken();
+  auto Proto = ParsePrototype();
+  if(!Proto)
+    return nullptr;
+  if(auto E = ParseExpression())
+    return std::make_unique<FunctionAST>(std::move(Proto),std::move(E));
   return nullptr;
 }
-/// external ::= 'extern' prototype
-static std::unique_ptr<PrototypeAST> ParseExtern() {
-  getNextToken();  // eat extern.
+
+static std::unique_ptr<PrototypeAST> ParseExtern(){
+  getNextToken();
   return ParsePrototype();
 }
 
-/// toplevelexpr ::= expression
-static std::unique_ptr<FunctionAST> ParseTopLevelExpr() {
-  if (auto E = ParseExpression()) {
-    // Make an anonymous proto.
-    auto Proto = std::make_unique<PrototypeAST>("", std::vector<std::string>());
-    return std::make_unique<FunctionAST>(std::move(Proto), std::move(E));
-  }
-  return nullptr;
+static std::unique_ptr<FunctionAST> ParseTopLevelExpr(){
+    if(auto E = ParseExpression()){
+      auto Proto = std::make_unique<PrototypeAST>("",std::vector<std::string>());
+      return std::make_unique<FunctionAST>(std::move(Proto),std::move(E));
+    }
+    return nullptr;
 }
 static void HandleDefinition() {
   if (ParseDefinition()) {
@@ -309,7 +303,7 @@ static void HandleTopLevelExpression() {
     getNextToken();
   }
 }
-/// top ::= definition | external | expression | ';'
+
 static void MainLoop() {
   while (true) {
     fprintf(stderr, "ready> ");
@@ -331,10 +325,6 @@ static void MainLoop() {
     }
   }
 }
-//===----------------------------------------------------------------------===//
-// Main driver code.
-//===----------------------------------------------------------------------===//
-
 int main() {
   // Install standard binary operators.
   // 1 is lowest precedence.
@@ -352,3 +342,4 @@ int main() {
 
   return 0;
 }
+//def foo(x y) foo(y, 4.0);
